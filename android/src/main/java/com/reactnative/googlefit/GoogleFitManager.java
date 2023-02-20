@@ -173,6 +173,16 @@ public class GoogleFitManager implements ActivityEventListener {
             optionsBuilder.requestScopes(new Scope(scopeName));
         }
 
+        GoogleApiClient.Builder apiClientBuilder = new GoogleApiClient.Builder(mReactContext.getApplicationContext())
+                .addApi(Fitness.SENSORS_API)
+                .addApi(Fitness.HISTORY_API)
+                .addApi(Fitness.RECORDING_API)
+                .addApi(Fitness.SESSIONS_API);
+
+        for (String scopeName : userScopes) {
+            apiClientBuilder.addScope(new Scope(scopeName));
+        }
+
         mSignInClient = GoogleSignIn.getClient(this.mActivity, optionsBuilder.build());
         Task<GoogleSignInAccount> result = mSignInClient.silentSignIn();
 
@@ -185,16 +195,6 @@ public class GoogleFitManager implements ActivityEventListener {
                     handleSignInTaskResult(result);
                 }
             });
-        }
-
-        GoogleApiClient.Builder apiClientBuilder = new GoogleApiClient.Builder(mReactContext.getApplicationContext())
-                .addApi(Fitness.SENSORS_API)
-                .addApi(Fitness.HISTORY_API)
-                .addApi(Fitness.RECORDING_API)
-                .addApi(Fitness.SESSIONS_API);
-
-        for (String scopeName : userScopes) {
-            apiClientBuilder.addScope(new Scope(scopeName));
         }
 
         mApiClient = apiClientBuilder
