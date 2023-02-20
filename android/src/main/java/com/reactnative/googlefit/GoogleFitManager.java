@@ -143,12 +143,13 @@ public class GoogleFitManager implements ActivityEventListener {
     }
 
     private Object handleSignInTaskResult(Task<GoogleSignInAccount> result) {
+        String id = null;
         try {
             GoogleSignInAccount account = result.getResult(ApiException.class);
             if (account == null) {
                 promiseWrapper.reject(TAG, "GoogleSignInAccount instance was null");
             } else {
-                String id = account.getId();
+                id = account.getId();
                 this.userId = id;
                 promiseWrapper.resolve(id);
             }
@@ -156,18 +157,23 @@ public class GoogleFitManager implements ActivityEventListener {
             int code = e.getStatusCode();
             String errorDescription = GoogleSignInStatusCodes.getStatusCodeString(code);
             promiseWrapper.reject(String.valueOf(code), errorDescription);
-        }
-        return null;
-    }
+        } finally {
+            WritableMap map = Arguments.createMap();
+            map.putString("userId", getUserId());
+            sendEvent(mReactContext, "GoogleFitAuthorizeSuccess", map);
 
+        }
+
+        return id;
+    }
 
     public void authorize(ArrayList<String> userScopes) {
         final ReactContext mReactContext = this.mReactContext;
 
-        GoogleSignInOptions.Builder optionsBuilder =
-                new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                        .requestEmail()
-                        .requestProfile();
+        GoogleSignInOptions.Builder optionsBuilder = new GoogleSignInOptions.Builder(
+                GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestEmail()
+                .requestProfile();
 
         for (String scopeName : userScopes) {
             optionsBuilder.requestScopes(new Scope(scopeName));
@@ -183,29 +189,31 @@ public class GoogleFitManager implements ActivityEventListener {
             apiClientBuilder.addScope(new Scope(scopeName));
         }
 
-        mSignInClient = GoogleSignIn.getClient(this.mActivity, optionsBuilder.build());
-        Task<GoogleSignInAccount> result = mSignInClient.silentSignIn();
-
-        if (result.isSuccessful()) {
-            handleSignInTaskResult(result);
-        } else {
-            result.addOnCompleteListener(new OnCompleteListener() {
-                @Override
-                public void onComplete(Task task) {
-                    handleSignInTaskResult(result);
-                }
-            });
-        }
-
         mApiClient = apiClientBuilder
                 .addConnectionCallbacks(
                         new GoogleApiClient.ConnectionCallbacks() {
                             @Override
                             public void onConnected(@Nullable Bundle bundle) {
                                 Log.i(TAG, "Authorization - Connected");
-                                WritableMap map = Arguments.createMap();
-                                map.putString("userId", userId);
-                                sendEvent(mReactContext, "GoogleFitAuthorizeSuccess", map);
+
+                                mSignInClient = GoogleSignIn.getClient(mActivity, optionsBuilder.build());
+                                Task<GoogleSignInAccount> result = mSignInClient.silentSignIn();
+
+                                if (result.isSuccessful()) {
+                                    handleSignInTaskResult(result);
+
+                                } else {
+                                    result.addOnCompleteListener(new OnCompleteListener() {
+                                        @Override
+                                        public void onComplete(Task task) {
+                                            handleSignInTaskResult(result);
+                                        }
+                                    });
+                                }
+
+                                // WritableMap map = Arguments.createMap();
+                                // map.putString("userId", getUserId());
+                                // sendEvent(mReactContext, "GoogleFitAuthorizeSuccess", map);
                             }
 
                             @Override
@@ -215,8 +223,7 @@ public class GoogleFitManager implements ActivityEventListener {
                                     mApiClient.disconnect();
                                 }
                             }
-                        }
-                )
+                        })
                 .addOnConnectionFailedListener(
                         new GoogleApiClient.OnConnectionFailedListener() {
                             @Override
@@ -241,8 +248,7 @@ public class GoogleFitManager implements ActivityEventListener {
                                     sendEvent(mReactContext, "GoogleFitAuthorizeFailure", map);
                                 }
                             }
-                        }
-                )
+                        })
                 .build();
 
         mApiClient.connect();
@@ -273,7 +279,7 @@ public class GoogleFitManager implements ActivityEventListener {
     }
 
     public String getUserId() {
-        return userId;
+        return this.userId;
     }
 
     protected void stop() {
@@ -288,40 +294,42 @@ public class GoogleFitManager implements ActivityEventListener {
                 });
     }
 
-
     private void sendEvent(ReactContext reactContext,
-                           String eventName,
-                           @Nullable WritableMap params) {
+            String eventName,
+            @Nullable WritableMap params) {
         reactContext
                 .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
                 .emit(eventName, params);
     }
 
-//    reserve to replace deprecated Api in the future
-//    @Override
-//    public void onActivityResult(Activity activity, int requestCode, int resultCode, Intent data) {
-//        // Result returned from launching the Intent from GoogleSignInClient.getSignInIntent(...);
-//        if (requestCode == REQUEST_OAUTH) {
-//            // The Task returned from this call is always completed, no need to attach
-//            // a listener.
-//            Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(data);
-//            handleSignInResult(task);
-//        }
-//    }
-//
-//    private void handleSignInResult(Task<GoogleSignInAccount> completedTask) {
-//        try {
-//            GoogleSignInAccount account = completedTask.getResult(ApiException.class);
-//            if (!mApiClient.isConnecting() && !mApiClient.isConnected()) {
-//                mApiClient.connect();
-//            }
-//        } catch (ApiException e) {
-//            Log.e(TAG, "Authorization - Cancel");
-//            WritableMap map = Arguments.createMap();
-//            map.putString("message", "" + "Authorization cancelled");
-//            sendEvent(mReactContext, "GoogleFitAuthorizeFailure", map);
-//        }
-//    }
+    // reserve to replace deprecated Api in the future
+    // @Override
+    // public void onActivityResult(Activity activity, int requestCode, int
+    // resultCode, Intent data) {
+    // // Result returned from launching the Intent from
+    // GoogleSignInClient.getSignInIntent(...);
+    // if (requestCode == REQUEST_OAUTH) {
+    // // The Task returned from this call is always completed, no need to attach
+    // // a listener.
+    // Task<GoogleSignInAccount> task =
+    // GoogleSignIn.getSignedInAccountFromIntent(data);
+    // handleSignInResult(task);
+    // }
+    // }
+    //
+    // private void handleSignInResult(Task<GoogleSignInAccount> completedTask) {
+    // try {
+    // GoogleSignInAccount account = completedTask.getResult(ApiException.class);
+    // if (!mApiClient.isConnecting() && !mApiClient.isConnected()) {
+    // mApiClient.connect();
+    // }
+    // } catch (ApiException e) {
+    // Log.e(TAG, "Authorization - Cancel");
+    // WritableMap map = Arguments.createMap();
+    // map.putString("message", "" + "Authorization cancelled");
+    // sendEvent(mReactContext, "GoogleFitAuthorizeFailure", map);
+    // }
+    // }
 
     @Override
     public void onActivityResult(Activity activity, int requestCode, int resultCode, Intent data) {
