@@ -8,34 +8,36 @@
  * Based on Asim Malik android source code, copyright (c) 2015
  **/
 
-package com.reactnative.googlefit;
+ package com.reactnative.googlefit;
 
-import android.app.Activity;
-import android.content.pm.PackageManager;
-import android.os.Build;
-import android.util.Log;
-
-import java.util.ArrayList;
-
-import android.content.Intent;
-
-import androidx.annotation.RequiresApi;
-
-import com.facebook.react.bridge.Arguments;
-import com.facebook.react.bridge.Callback;
-import com.facebook.react.bridge.Promise;
-import com.facebook.react.bridge.ReactApplicationContext;
-import com.facebook.react.bridge.ReactContext;
-import com.facebook.react.bridge.ReactContextBaseJavaModule;
-import com.facebook.react.bridge.ReactMethod;
-import com.facebook.react.bridge.ReadableArray;
-import com.facebook.react.bridge.ReadableMap;
-import com.facebook.react.bridge.LifecycleEventListener;
-import com.facebook.react.uimanager.IllegalViewOperationException;
-import com.google.android.gms.fitness.data.DataType;
-import com.google.android.gms.fitness.data.HealthDataTypes;
-import com.facebook.react.bridge.WritableMap;
-
+ import android.app.Activity;
+ import android.content.pm.ApplicationInfo;
+ import android.content.pm.PackageManager;
+ import android.os.Build;
+ import android.util.Log;
+ 
+ import java.util.ArrayList;
+ import java.util.List;
+ 
+ import android.content.Intent;
+ 
+ import androidx.annotation.RequiresApi;
+ 
+ import com.facebook.react.bridge.Arguments;
+ import com.facebook.react.bridge.Callback;
+ import com.facebook.react.bridge.Promise;
+ import com.facebook.react.bridge.ReactApplicationContext;
+ import com.facebook.react.bridge.ReactContext;
+ import com.facebook.react.bridge.ReactContextBaseJavaModule;
+ import com.facebook.react.bridge.ReactMethod;
+ import com.facebook.react.bridge.ReadableArray;
+ import com.facebook.react.bridge.ReadableMap;
+ import com.facebook.react.bridge.LifecycleEventListener;
+ import com.facebook.react.uimanager.IllegalViewOperationException;
+ import com.google.android.gms.fitness.data.DataType;
+ import com.google.android.gms.fitness.data.HealthDataTypes;
+ import com.facebook.react.bridge.WritableMap;
+ 
 
 public class GoogleFitModule extends ReactContextBaseJavaModule implements LifecycleEventListener {
 
@@ -59,6 +61,18 @@ public class GoogleFitModule extends ReactContextBaseJavaModule implements Lifec
         super.initialize();
 
         getReactApplicationContext().addLifecycleEventListener(this);
+    }
+
+    @ReactMethod
+    private void isGoogleFitInstalled(final Promise promise) {
+        PackageManager packageManager = mReactContext.getPackageManager();
+        List<ApplicationInfo> installedApplications = packageManager.getInstalledApplications(0);
+        for (ApplicationInfo info : installedApplications) {
+            if ("com.google.android.apps.fitness".equals(info.packageName)) {
+                promise.resolve(true);
+            }
+        }
+        promise.resolve(false);
     }
 
     @Override
