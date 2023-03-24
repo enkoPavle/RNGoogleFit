@@ -7,608 +7,382 @@
  * <p>
  * Based on Asim Malik android source code, copyright (c) 2015
  **/
+package com.reactnative.googlefit;
 
- package com.reactnative.googlefit;
+import android.app.Activity;
+import android.app.Dialog;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentSender;
+import android.content.DialogInterface;
+import android.os.Bundle;
 
- import android.app.Activity;
- import android.content.pm.ApplicationInfo;
- import android.content.pm.PackageInfo;
- import android.content.pm.PackageInstaller;
- import android.content.pm.PackageManager;
- import android.os.Build;
- import android.util.Log;
- 
- import java.util.ArrayList;
- import java.util.List;
- import java.util.concurrent.TimeUnit;
- 
- import android.content.Intent;
- 
- import androidx.annotation.RequiresApi;
- 
- import com.facebook.react.bridge.Arguments;
- import com.facebook.react.bridge.Callback;
- import com.facebook.react.bridge.Promise;
- import com.facebook.react.bridge.ReactApplicationContext;
- import com.facebook.react.bridge.ReactContext;
- import com.facebook.react.bridge.ReactContextBaseJavaModule;
- import com.facebook.react.bridge.ReactMethod;
- import com.facebook.react.bridge.ReadableArray;
- import com.facebook.react.bridge.ReadableMap;
- import com.facebook.react.bridge.LifecycleEventListener;
- import com.facebook.react.bridge.WritableArray;
- import com.facebook.react.uimanager.IllegalViewOperationException;
- import com.google.android.gms.auth.api.signin.GoogleSignIn;
- import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
- import com.google.android.gms.auth.api.signin.GoogleSignInOptionsExtension;
- import com.google.android.gms.common.api.GoogleApiClient;
- import com.google.android.gms.fitness.Fitness;
- import com.google.android.gms.fitness.FitnessActivities;
- import com.google.android.gms.fitness.FitnessOptions;
- import com.google.android.gms.fitness.data.Bucket;
- import com.google.android.gms.fitness.data.DataPoint;
- import com.google.android.gms.fitness.data.DataSet;
- import com.google.android.gms.fitness.data.DataType;
- import com.google.android.gms.fitness.data.Field;
- import com.google.android.gms.fitness.data.HealthDataTypes;
- import com.facebook.react.bridge.WritableMap;
- import com.google.android.gms.fitness.request.DataReadRequest;
- import com.google.android.gms.fitness.result.DataReadResponse;
- import com.google.android.gms.fitness.result.DataReadResult;
- import com.google.android.gms.tasks.Task;
- import com.google.android.gms.tasks.Tasks;
- 
- 
- public class GoogleFitModule extends ReactContextBaseJavaModule implements LifecycleEventListener {
- 
-     private static final String REACT_MODULE = "RNGoogleFit";
-     private ReactContext mReactContext;
-     private GoogleFitManager mGoogleFitManager = null;
-     private String GOOGLE_FIT_APP_URI = "com.google.android.apps.fitness";
- 
-     public GoogleFitModule(ReactApplicationContext reactContext) {
-         super(reactContext);
-         this.mReactContext = reactContext;
-     }
- 
-     @Override
-     public String getName() {
-         return REACT_MODULE;
-     }
- 
-     @Override
-     public void initialize() {
-         super.initialize();
- 
-         getReactApplicationContext().addLifecycleEventListener(this);
-     }
- 
-     @Override
-     public void onHostResume() {
-         if (mGoogleFitManager != null) {
-             mGoogleFitManager.resetAuthInProgress();
-         }
-     }
- 
-     @Override
-     public void onHostPause() {
-     }
- 
-     @Override
-     public void onHostDestroy() {
-         // todo disconnect from Google Fit
-     }
- 
-     @ReactMethod
-     private void isGoogleFitInstalled(final Promise promise) {
-         PackageManager packageManager = mReactContext.getPackageManager();
-         List<ApplicationInfo> installedApplications = packageManager.getInstalledApplications(0);
-         for (ApplicationInfo info : installedApplications) {
-             if ("com.google.android.apps.fitness".equals(info.packageName)) {
-                 promise.resolve(true);
-             }
-         }
-         promise.resolve(false);
-     }
- 
-     @ReactMethod
-     public void authorize(ReadableMap options) {
-         final Activity activity = getCurrentActivity();
- 
-         if (mGoogleFitManager == null) {
-             mGoogleFitManager = new GoogleFitManager(mReactContext, activity);
-         }
- 
-         if (mGoogleFitManager.isAuthorized()) {
-             return;
-         }
- 
-         ReadableArray scopes = options.getArray("scopes");
-         ArrayList<String> scopesList = new ArrayList<String>();
- 
-         for (Object type : scopes.toArrayList()) {
-             scopesList.add(type.toString());
-         }
- 
-         mGoogleFitManager.authorize(scopesList);
-     }
- 
-     @ReactMethod
-     public void isAuthorized(final Promise promise) {
-         boolean isAuthorized = false;
-         if (mGoogleFitManager != null && mGoogleFitManager.isAuthorized()) {
-             isAuthorized = true;
-         }
-         WritableMap map = Arguments.createMap();
-         map.putBoolean("isAuthorized", isAuthorized);
-         promise.resolve(map);
-     }
- 
-     @ReactMethod
-     public void getUserId(final Promise promise) {
-         WritableMap map = Arguments.createMap();
- 
-         if (mGoogleFitManager != null && mGoogleFitManager.isAuthorized()) {
-             map.putString("userId", mGoogleFitManager.getUserId());
-         }
-         promise.resolve(map);
-     }
- 
-     @ReactMethod
-     public void disconnect(Promise promise) {
-         try {
-             if (mGoogleFitManager != null) {
-                 mGoogleFitManager.disconnect(getCurrentActivity());
-             }
-             promise.resolve(null);
-         } catch (Exception e) {
-             promise.reject(e);
-         }
-     }
- 
-     @ReactMethod
-     public void startFitnessRecording(ReadableArray dataTypes) {
-         mGoogleFitManager.getRecordingApi().subscribe(dataTypes);
-     }
- 
-     @ReactMethod
-     public void observeSteps() {
-         mGoogleFitManager.getStepCounter().findFitnessDataSources();
-     }
- 
-     @ReactMethod
-     public void getDailyStepCountSamples(double startDate,
-                                          double endDate,
-                                          int bucketInterval,
-                                          String bucketUnit,
-                                          Promise promise
-     ) {
-         try {
-             mGoogleFitManager.getStepHistory().aggregateDataByDate((long) startDate, (long) endDate,
-                     bucketInterval,
-                     bucketUnit,
-                     promise
-             );
-         } catch (Error e) {
-             promise.reject(e);
-         }
-     }
- 
-     @ReactMethod
-     public void getActivitySamples(double startDate,
-                                    double endDate,
-                                    int bucketInterval,
-                                    String bucketUnit,
-                                    Promise promise) {
-         try {
-             promise.resolve(mGoogleFitManager.getActivityHistory().getActivitySamples((long) startDate, (long) endDate, bucketInterval, bucketUnit));
-         } catch (IllegalViewOperationException e) {
-             promise.reject(e);
-         }
-     }
- 
-     @ReactMethod
-     public void getMoveMinutes(double startDate,
-                                double endDate,
-                                int bucketInterval,
-                                String bucketUnit,
-                                Promise promise) {
-         try {
-             promise.resolve(mGoogleFitManager.getActivityHistory().getMoveMinutes((long) startDate, (long) endDate, bucketInterval, bucketUnit));
-         } catch (Exception e) {
-             promise.reject(e);
-         }
-     }
- 
-     @ReactMethod
-     public void getUserInputSteps(double startDate,
-                                   double endDate,
-                                   Callback errorCallback,
-                                   Callback successCallback) {
-         try {
-             mGoogleFitManager.getStepHistory().getUserInputSteps((long) startDate, (long) endDate, successCallback);
-         } catch (IllegalViewOperationException e) {
-             errorCallback.invoke(e.getMessage());
-         }
-     }
- 
-     @ReactMethod
-     public void getDailyDistanceSamples(double startDate,
-                                         double endDate,
-                                         int bucketInterval,
-                                         String bucketUnit,
-                                         Promise promise) {
-         try {
-             promise.resolve(mGoogleFitManager.getDistanceHistory().aggregateDataByDate((long) startDate, (long) endDate, bucketInterval, bucketUnit));
-         } catch (IllegalViewOperationException e) {
-             promise.reject(e);
-         }
-     }
- 
-     @ReactMethod
-     public void getWeightSamples(double startDate,
-                                  double endDate,
-                                  int bucketInterval,
-                                  String bucketUnit,
-                                  Promise promise) {
-         try {
-             BodyHistory bodyHistory = mGoogleFitManager.getBodyHistory();
-             bodyHistory.setDataType(DataType.TYPE_WEIGHT);
-             promise.resolve(bodyHistory.getHistory((long)startDate, (long)endDate, bucketInterval, bucketUnit));
-         } catch (IllegalViewOperationException e) {
-             promise.reject(e);
-         }
-     }
- 
-     @ReactMethod
-     public void getHeightSamples(double startDate,
-                                  double endDate,
-                                  int bucketInterval,
-                                  String bucketUnit,
-                                  Promise promise) {
-         try {
-             BodyHistory bodyHistory = mGoogleFitManager.getBodyHistory();
-             bodyHistory.setDataType(DataType.TYPE_HEIGHT);
-             promise.resolve(bodyHistory.getHistory((long)startDate, (long)endDate, bucketInterval, bucketUnit));
-         } catch (IllegalViewOperationException e) {
-             promise.reject(e);
-         }
-     }
- 
-     @ReactMethod
-     public void saveHeight(ReadableMap heightSample,
-                            Callback errorCallback,
-                            Callback successCallback) {
- 
-         try {
-             BodyHistory bodyHistory = mGoogleFitManager.getBodyHistory();
-             bodyHistory.setDataType(DataType.TYPE_HEIGHT);
-             successCallback.invoke(bodyHistory.save(heightSample));
-         } catch (IllegalViewOperationException e) {
-             errorCallback.invoke(e.getMessage());
-         }
-     }
- 
-     @ReactMethod
-     public void getDailyCalorieSamples(double startDate,
-                                        double endDate,
-                                        boolean basalCalculation,
-                                        int bucketInterval,
-                                        String bucketUnit,
-                                        Promise promise) {
- 
-         try {
-             promise.resolve(mGoogleFitManager.getCalorieHistory().aggregateDataByDate((long) startDate, (long) endDate, basalCalculation, bucketInterval, bucketUnit));
-         } catch (IllegalViewOperationException e) {
-             promise.reject(e);
-         }
-     }
- 
-     @ReactMethod
-     public void saveFood(ReadableMap foodSample,
-                          Callback errorCallback,
-                          Callback successCallback) {
-         try {
-             successCallback.invoke(mGoogleFitManager.getCalorieHistory().saveFood(foodSample));
-         } catch (IllegalViewOperationException e) {
-             errorCallback.invoke(e.getMessage());
-         }
-     }
- 
-     @ReactMethod
-     public void getDailyNutritionSamples(double startDate,
-                                          double endDate,
-                                          int bucketInterval,
-                                          String bucketUnit,
-                                          Promise promise) {
-         try {
-             promise.resolve(mGoogleFitManager.getNutritionHistory().aggregateDataByDate((long) startDate, (long) endDate, bucketInterval, bucketUnit));
-         } catch (IllegalViewOperationException e) {
-             promise.reject(e);
-         }
-     }
- 
-     @ReactMethod
-     public void saveWeight(ReadableMap weightSample,
-                            Callback errorCallback,
-                            Callback successCallback) {
-         try {
-             BodyHistory bodyHistory = mGoogleFitManager.getBodyHistory();
-             bodyHistory.setDataType(DataType.TYPE_WEIGHT);
-             successCallback.invoke(bodyHistory.save(weightSample));
-         } catch (IllegalViewOperationException e) {
-             errorCallback.invoke(e.getMessage());
-         }
-     }
- 
-     @ReactMethod
-     public void deleteWeight(ReadableMap options, Callback errorCallback, Callback successCallback) {
-         try {
-             BodyHistory bodyHistory = mGoogleFitManager.getBodyHistory();
-             bodyHistory.setDataType(DataType.TYPE_WEIGHT);
-             successCallback.invoke(bodyHistory.delete(options));
-         } catch (IllegalViewOperationException e) {
-             errorCallback.invoke(e.getMessage());
-         }
-     }
- 
-     @ReactMethod
-     public void deleteHeight(ReadableMap options, Callback errorCallback, Callback successCallback) {
-         try {
-             BodyHistory bodyHistory = mGoogleFitManager.getBodyHistory();
-             bodyHistory.setDataType(DataType.TYPE_HEIGHT);
-             successCallback.invoke(bodyHistory.delete(options));
-         } catch (IllegalViewOperationException e) {
-             errorCallback.invoke(e.getMessage());
-         }
-     }
- 
-     @ReactMethod
-     public void isAvailable(Callback errorCallback, Callback successCallback) { // true if GoogleFit installed
-         try {
-             successCallback.invoke(isAvailableCheck());
-         } catch (IllegalViewOperationException e) {
-             errorCallback.invoke(e.getMessage());
-         }
-     }
- 
-     @ReactMethod
-     public void isEnabled(Callback errorCallback, Callback successCallback) { // true if permission granted
-         try {
-             successCallback.invoke(isEnabledCheck());
-         } catch (IllegalViewOperationException e) {
-             errorCallback.invoke(e.getMessage());
-         }
-     }
- 
-     @ReactMethod
-     public void openFit() {
-         PackageManager pm = mReactContext.getPackageManager();
-         try {
-             Intent launchIntent = pm.getLaunchIntentForPackage(GOOGLE_FIT_APP_URI);
-             mReactContext.startActivity(launchIntent);
-         } catch (Exception e) {
-             Log.i(REACT_MODULE, e.toString());
-         }
-     }
- 
-     private boolean isAvailableCheck() {
-         PackageManager pm = mReactContext.getPackageManager();
-         try {
-             pm.getPackageInfo(GOOGLE_FIT_APP_URI, PackageManager.GET_ACTIVITIES);
-             return true;
-         } catch (Exception e) {
-             Log.i(REACT_MODULE, e.toString());
-             return false;
-         }
-     }
- 
-     private boolean isEnabledCheck() {
-         if (mGoogleFitManager == null) {
-             mGoogleFitManager = new GoogleFitManager(mReactContext, getCurrentActivity());
-         }
-         return mGoogleFitManager.isAuthorized();
-     }
- 
-     @ReactMethod
-     public void getBloodPressureSamples(double startDate,
-                                         double endDate,
-                                         int bucketInterval,
-                                         String bucketUnit,
-                                         Promise promise) {
-         try {
-             HealthHistory healthHistory = mGoogleFitManager.getHealthHistory();
-             healthHistory.setDataType(HealthDataTypes.TYPE_BLOOD_PRESSURE);
-             promise.resolve(healthHistory.getHistory((long)startDate, (long)endDate, bucketInterval, bucketUnit));
-         } catch (IllegalViewOperationException e) {
-             promise.reject(e);
-         }
-     }
- 
-     @ReactMethod
-     public void getBodyTemperatureSamples(double startDate,
-                                           double endDate,
-                                           int bucketInterval,
-                                           String bucketUnit,
-                                           Promise promise) {
-         try {
-             HealthHistory healthHistory = mGoogleFitManager.getHealthHistory();
-             healthHistory.setDataType(HealthDataTypes.TYPE_BODY_TEMPERATURE);
-             promise.resolve(healthHistory.getHistory((long)startDate, (long)endDate, bucketInterval, bucketUnit));
-         } catch (IllegalViewOperationException e) {
-             promise.reject(e);
-         }
-     }
- 
-     @ReactMethod
-     public void getOxygenSaturationSamples(double startDate,
-                                            double endDate,
-                                            int bucketInterval,
-                                            String bucketUnit,
-                                            Promise promise) {
-         try {
-             HealthHistory healthHistory = mGoogleFitManager.getHealthHistory();
-             healthHistory.setDataType(HealthDataTypes.TYPE_OXYGEN_SATURATION);
-             promise.resolve(healthHistory.getHistory((long)startDate, (long)endDate, bucketInterval, bucketUnit));
-         } catch (IllegalViewOperationException e) {
-             promise.reject(e);
-         }
-     }
- 
-     @ReactMethod
-     public void getBloodGlucoseSamples(double startDate,
-                                        double endDate,
-                                        int bucketInterval,
-                                        String bucketUnit,
-                                        Promise promise) {
-         try {
-             HealthHistory healthHistory = mGoogleFitManager.getHealthHistory();
-             healthHistory.setDataType(HealthDataTypes.TYPE_BLOOD_GLUCOSE);
-             promise.resolve(healthHistory.getHistory((long)startDate, (long)endDate, bucketInterval, bucketUnit));
-         } catch (IllegalViewOperationException e) {
-             promise.reject(e);
-         }
-     }
- 
-     @ReactMethod
-     public void saveBloodGlucose(ReadableMap bloodGlucoseSample, Promise promise) {
-         try {
-             HealthHistory healthHistory = mGoogleFitManager.getHealthHistory();
-             healthHistory.setDataType(HealthDataTypes.TYPE_BLOOD_GLUCOSE);
-             healthHistory.saveBloodGlucose(bloodGlucoseSample);
-         } catch (Error e) {
-             promise.reject(e);
-         }
-     }
- 
-     @ReactMethod
-     public void saveBloodPressure(ReadableMap bloodPressureSample, Promise promise) {
-         try {
-             HealthHistory healthHistory = mGoogleFitManager.getHealthHistory();
-             healthHistory.setDataType(HealthDataTypes.TYPE_BLOOD_PRESSURE);
-             healthHistory.saveBloodPressure(bloodPressureSample);
-         } catch (Error e) {
-             promise.reject(e);
-         }
-     }
- 
-     @ReactMethod
-     public void getHeartRateSamples(double startDate,
-                                     double endDate,
-                                     int bucketInterval,
-                                     String bucketUnit,
-                                     Promise promise) {
- 
-         try {
-             HealthHistory healthHistory = mGoogleFitManager.getHealthHistory();
-             healthHistory.setDataType(DataType.TYPE_HEART_RATE_BPM);
-             promise.resolve(healthHistory.getHistory((long)startDate, (long)endDate, bucketInterval, bucketUnit));
-         } catch (IllegalViewOperationException e) {
-             promise.reject(e);
-         }
-     }
- 
-     @ReactMethod
-     public void getRestingHeartRateSamples(double startDate,
-                                            double endDate,
-                                            int bucketInterval,
-                                            String bucketUnit,
-                                            Promise promise) {
- 
-         try {
-             HealthHistory healthHistory = mGoogleFitManager.getHealthHistory();
-             healthHistory.setDataType(DataType.TYPE_HEART_RATE_BPM);
-             promise.resolve(healthHistory.getRestingHeartRateHistory((long)startDate, (long)endDate, bucketInterval, bucketUnit));
-         } catch (IllegalViewOperationException e) {
-             promise.reject(e);
-         }
-     }
- 
-     @ReactMethod
-     public void getHydrationSamples(double startDate,
-                                     double endDate,
-                                     Promise promise) {
-         try {
-             promise.resolve(mGoogleFitManager.getHydrationHistory().getHistory((long) startDate, (long) endDate));
-         } catch (IllegalViewOperationException e) {
-             promise.reject(e);
-         }
-     }
- 
-     @ReactMethod
-     public void saveHydration(ReadableArray hydrationArray,
-                               Callback errorCallback,
-                               Callback successCallback) {
-         try {
-             HydrationHistory hydrationHistory = mGoogleFitManager.getHydrationHistory();
-             successCallback.invoke(hydrationHistory.save(hydrationArray));
-         } catch (IllegalViewOperationException e) {
-             errorCallback.invoke(e.getMessage());
-         }
-     }
-     @ReactMethod
-     public void deleteHydration(ReadableMap options, Callback errorCallback, Callback successCallback) {
-         try {
-             HydrationHistory hydrationHistory = mGoogleFitManager.getHydrationHistory();
-             successCallback.invoke(hydrationHistory.delete(options));
-         } catch (IllegalViewOperationException e) {
-             errorCallback.invoke(e.getMessage());
-         }
-     }
- 
-     @RequiresApi(api = Build.VERSION_CODES.N)
-     @ReactMethod
-     public void getSleepSamples(double startDate, double endDate, Promise promise) {
-         try {
-             mGoogleFitManager.getSleepHistory().getSleepData((long)startDate, (long)endDate, promise);
-         } catch (Error e) {
-             promise.reject(e);
-         }
-     }
- 
-     @ReactMethod
-     public void saveSleep(ReadableMap sleepSample, Promise promise) {
-         try {
-             mGoogleFitManager.getSleepHistory().saveSleep(sleepSample, promise);
-         } catch (Error e) {
-             promise.reject(e);
-         }
-     }
- 
-     @ReactMethod
-     public void getWorkoutSession(double startDate, double endDate, ReadableMap options, Promise promise) {
-         try {
-             mGoogleFitManager.getActivityHistory().getWorkoutSession((long) startDate, (long) endDate, options, promise);
-         } catch (Error e) {
-             promise.reject(e);
-         }
-     }
- 
-     @ReactMethod
-     public void saveWorkout(double startDate, double endDate, ReadableMap options, Promise promise) {
-         try {
-             mGoogleFitManager.getActivityHistory().saveWorkout((long) startDate, (long) endDate, options, promise);
-         } catch (Error e) {
-             promise.reject(e);
-         }
-     }
- 
-     @ReactMethod
-     public void deleteAllWorkout(double startDate, double endDate, ReadableMap options, Promise promise) {
-         try {
-             mGoogleFitManager.getActivityHistory().deleteAllWorkout((long) startDate, (long) endDate, options, promise);
-         } catch (Error e) {
-             promise.reject(e);
-         }
-     }
- 
-     @ReactMethod
-     public void deleteAllSleep(double startDate, double endDate, ReadableMap options, Promise promise) {
-         try {
-             mGoogleFitManager.getActivityHistory().deleteAllSleep((long) startDate, (long) endDate, options, promise);
-         } catch (Error e) {
-             promise.reject(e);
-         }
-     }
- }
- 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import android.util.Log;
+
+import java.util.ArrayList;
+
+import com.facebook.react.bridge.ActivityEventListener;
+import com.facebook.react.bridge.Arguments;
+import com.facebook.react.bridge.ReactContext;
+import com.facebook.react.bridge.WritableMap;
+import com.facebook.react.modules.core.DeviceEventManagerModule;
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.GoogleApiAvailability;
+import com.google.android.gms.common.ErrorDialogFragment;
+import com.google.android.gms.common.api.ApiException;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.ResultCallback;
+import com.google.android.gms.common.api.Scope;
+import com.google.android.gms.common.api.Status;
+import com.google.android.gms.fitness.Fitness;
+import com.google.android.gms.auth.api.signin.*;
+import com.google.android.gms.tasks.Task;
+import com.google.android.gms.tasks.OnCompleteListener;
+
+public class GoogleFitManager implements ActivityEventListener {
+
+    private ReactContext mReactContext;
+    private GoogleApiClient mApiClient;
+    private static final int REQUEST_OAUTH = 1001;
+    private static final String AUTH_PENDING = "auth_state_pending";
+    private static boolean mAuthInProgress = false;
+    private Activity mActivity;
+
+    private DistanceHistory distanceHistory;
+    private StepHistory stepHistory;
+    private BodyHistory bodyHistory;
+    private HealthHistory healthHistory;
+    private CalorieHistory calorieHistory;
+    private NutritionHistory nutritionHistory;
+    private StepCounter mStepCounter;
+    private StepSensor stepSensor;
+    private RecordingApi recordingApi;
+    private ActivityHistory activityHistory;
+    private HydrationHistory hydrationHistory;
+    private SleepHistory sleepHistory;
+
+    private GoogleSignInClient mSignInClient;
+    private PromiseWrapper promiseWrapper;
+
+    private static final String TAG = "RNGoogleFit";
+    static String userId;
+
+    public GoogleFitManager(ReactContext reactContext, Activity activity) {
+
+        this.mReactContext = reactContext;
+        this.mActivity = activity;
+
+        mReactContext.addActivityEventListener(this);
+
+        this.mStepCounter = new StepCounter(mReactContext, this, activity);
+        this.stepHistory = new StepHistory(mReactContext, this);
+        this.bodyHistory = new BodyHistory(mReactContext, this);
+        this.healthHistory = new HealthHistory(mReactContext, this);
+        this.distanceHistory = new DistanceHistory(mReactContext, this);
+        this.calorieHistory = new CalorieHistory(mReactContext, this);
+        this.nutritionHistory = new NutritionHistory(mReactContext, this);
+        this.recordingApi = new RecordingApi(mReactContext, this);
+        this.activityHistory = new ActivityHistory(mReactContext, this);
+        this.hydrationHistory = new HydrationHistory(mReactContext, this);
+        this.sleepHistory = new SleepHistory(mReactContext, this);
+        this.promiseWrapper = new PromiseWrapper();
+        this.userId = null;
+    }
+
+    public GoogleApiClient getGoogleApiClient() {
+        return mApiClient;
+    }
+
+    public RecordingApi getRecordingApi() {
+        return recordingApi;
+    }
+
+    public StepCounter getStepCounter() {
+        return mStepCounter;
+    }
+
+    public StepHistory getStepHistory() {
+        return stepHistory;
+    }
+
+    public BodyHistory getBodyHistory() {
+        return bodyHistory;
+    }
+
+    public HealthHistory getHealthHistory() {
+        return healthHistory;
+    }
+
+    public DistanceHistory getDistanceHistory() {
+        return distanceHistory;
+    }
+
+    public CalorieHistory getCalorieHistory() {
+        return calorieHistory;
+    }
+
+    public NutritionHistory getNutritionHistory() {
+        return nutritionHistory;
+    }
+
+    public HydrationHistory getHydrationHistory() {
+        return hydrationHistory;
+    }
+
+    public SleepHistory getSleepHistory() {
+        return sleepHistory;
+    }
+
+    public void resetAuthInProgress() {
+        if (!isAuthorized()) {
+            mAuthInProgress = false;
+        }
+    }
+
+    private Object handleSignInTaskResult(Task<GoogleSignInAccount> result) {
+        String id = null;
+        try {
+            GoogleSignInAccount account = result.getResult(ApiException.class);
+            if (account == null) {
+                promiseWrapper.reject(TAG, "GoogleSignInAccount instance was null");
+            } else {
+                id = account.getId();
+                this.userId = id;
+                promiseWrapper.resolve(id);
+            }
+        } catch (ApiException e) {
+            int code = e.getStatusCode();
+            String errorDescription = GoogleSignInStatusCodes.getStatusCodeString(code);
+            promiseWrapper.reject(String.valueOf(code), errorDescription);
+        } finally {
+            WritableMap map = Arguments.createMap();
+            map.putString("userId", getUserId());
+            sendEvent(mReactContext, "GoogleFitAuthorizeSuccess", map);
+
+        }
+
+        return id;
+    }
+
+    public void authorize(ArrayList<String> userScopes) {
+        final ReactContext mReactContext = this.mReactContext;
+
+        GoogleSignInOptions.Builder optionsBuilder = new GoogleSignInOptions.Builder(
+                GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestEmail()
+                .requestProfile();
+
+        for (String scopeName : userScopes) {
+            optionsBuilder.requestScopes(new Scope(scopeName));
+        }
+
+        GoogleApiClient.Builder apiClientBuilder = new GoogleApiClient.Builder(mReactContext.getApplicationContext())
+                .addApi(Fitness.SENSORS_API)
+                .addApi(Fitness.HISTORY_API)
+                .addApi(Fitness.RECORDING_API)
+                .addApi(Fitness.SESSIONS_API);
+
+        for (String scopeName : userScopes) {
+            apiClientBuilder.addScope(new Scope(scopeName));
+        }
+
+        mApiClient = apiClientBuilder
+                .addConnectionCallbacks(
+                        new GoogleApiClient.ConnectionCallbacks() {
+                            @Override
+                            public void onConnected(@Nullable Bundle bundle) {
+                                Log.i(TAG, "Authorization - Connected");
+
+                                mSignInClient = GoogleSignIn.getClient(mActivity, optionsBuilder.build());
+                                Task<GoogleSignInAccount> result = mSignInClient.silentSignIn();
+
+                                if (result.isSuccessful()) {
+                                    handleSignInTaskResult(result);
+
+                                } else {
+                                    result.addOnCompleteListener(new OnCompleteListener() {
+                                        @Override
+                                        public void onComplete(Task task) {
+                                            handleSignInTaskResult(result);
+                                        }
+                                    });
+                                }
+
+                                // WritableMap map = Arguments.createMap();
+                                // map.putString("userId", getUserId());
+                                // sendEvent(mReactContext, "GoogleFitAuthorizeSuccess", map);
+                            }
+
+                            @Override
+                            public void onConnectionSuspended(int i) {
+                                Log.i(TAG, "Authorization - Connection Suspended");
+                                if ((mApiClient != null) && (mApiClient.isConnected())) {
+                                    mApiClient.disconnect();
+                                }
+                            }
+                        })
+                .addOnConnectionFailedListener(
+                        new GoogleApiClient.OnConnectionFailedListener() {
+                            @Override
+                            public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
+                                Log.i(TAG, "Authorization - Failed Authorization Mgr:" + connectionResult);
+                                if (mAuthInProgress) {
+                                    Log.i(TAG, "Authorization - Already attempting to resolve an error.");
+                                } else if (connectionResult.hasResolution()) {
+                                    try {
+                                        mAuthInProgress = true;
+                                        connectionResult.startResolutionForResult(mActivity, REQUEST_OAUTH);
+                                    } catch (IntentSender.SendIntentException e) {
+                                        Log.i(TAG, "Authorization - Failed again: " + e);
+                                        mApiClient.connect();
+                                    }
+                                } else {
+                                    Log.i(TAG, "Show dialog using GoogleApiAvailability.getErrorDialog()");
+                                    showErrorDialog(connectionResult.getErrorCode());
+                                    mAuthInProgress = true;
+                                    WritableMap map = Arguments.createMap();
+                                    map.putString("message", "" + connectionResult);
+                                    sendEvent(mReactContext, "GoogleFitAuthorizeFailure", map);
+                                }
+                            }
+                        })
+                .build();
+
+        mApiClient.connect();
+    }
+
+    public void disconnect(Context context) {
+        GoogleSignInOptions options = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestEmail()
+                .build();
+        GoogleSignInClient googleSignInClient = GoogleSignIn.getClient(context, options);
+        // this is a temporary scope as a hotfix
+        // Ref to https://developers.google.com/android/guides/releases?hl=en
+        // will be removed in the future release
+        String tempScope = "www.googleapis.com/auth/fitness.activity.read";
+        GoogleSignInAccount gsa = GoogleSignIn.getAccountForScopes(mReactContext, new Scope(tempScope));
+        Fitness.getConfigClient(mReactContext, gsa).disableFit();
+        mApiClient.disconnect();
+
+        googleSignInClient.signOut();
+    }
+
+    public boolean isAuthorized() {
+        if (mApiClient != null && mApiClient.isConnected()) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    public String getUserId() {
+        return this.userId;
+    }
+
+    protected void stop() {
+        Fitness.SensorsApi.remove(mApiClient, mStepCounter)
+                .setResultCallback(new ResultCallback<Status>() {
+                    @Override
+                    public void onResult(Status status) {
+                        if (status.isSuccess()) {
+                            mApiClient.disconnect();
+                        }
+                    }
+                });
+    }
+
+    private void sendEvent(ReactContext reactContext,
+            String eventName,
+            @Nullable WritableMap params) {
+        reactContext
+                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                .emit(eventName, params);
+    }
+
+    // reserve to replace deprecated Api in the future
+    // @Override
+    // public void onActivityResult(Activity activity, int requestCode, int
+    // resultCode, Intent data) {
+    // // Result returned from launching the Intent from
+    // GoogleSignInClient.getSignInIntent(...);
+    // if (requestCode == REQUEST_OAUTH) {
+    // // The Task returned from this call is always completed, no need to attach
+    // // a listener.
+    // Task<GoogleSignInAccount> task =
+    // GoogleSignIn.getSignedInAccountFromIntent(data);
+    // handleSignInResult(task);
+    // }
+    // }
+    //
+    // private void handleSignInResult(Task<GoogleSignInAccount> completedTask) {
+    // try {
+    // GoogleSignInAccount account = completedTask.getResult(ApiException.class);
+    // if (!mApiClient.isConnecting() && !mApiClient.isConnected()) {
+    // mApiClient.connect();
+    // }
+    // } catch (ApiException e) {
+    // Log.e(TAG, "Authorization - Cancel");
+    // WritableMap map = Arguments.createMap();
+    // map.putString("message", "" + "Authorization cancelled");
+    // sendEvent(mReactContext, "GoogleFitAuthorizeFailure", map);
+    // }
+    // }
+
+    @Override
+    public void onActivityResult(Activity activity, int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQUEST_OAUTH) {
+            mAuthInProgress = false;
+            if (resultCode == Activity.RESULT_OK) {
+                // Make sure the app is not already connected or attempting to connect
+                if (!mApiClient.isConnecting() && !mApiClient.isConnected()) {
+                    mApiClient.connect();
+                }
+            } else if (resultCode == Activity.RESULT_CANCELED) {
+                Log.e(TAG, "Authorization - Cancel");
+                WritableMap map = Arguments.createMap();
+                map.putString("message", "" + "Authorization cancelled");
+                sendEvent(mReactContext, "GoogleFitAuthorizeFailure", map);
+            }
+        }
+    }
+
+    @Override
+    public void onNewIntent(Intent intent) {
+    }
+
+    public ActivityHistory getActivityHistory() {
+        return activityHistory;
+    }
+
+    public static class GoogleFitCustomErrorDialig extends ErrorDialogFragment {
+        @Override
+        public Dialog onCreateDialog(Bundle savedInstanceState) {
+            // Get the error code and retrieve the appropriate dialog
+            int errorCode = this.getArguments().getInt(AUTH_PENDING);
+            return GoogleApiAvailability.getInstance().getErrorDialog(
+                    this.getActivity(), errorCode, REQUEST_OAUTH);
+        }
+
+        @Override
+        public void onCancel(DialogInterface dialog) {
+            mAuthInProgress = false;
+        }
+    }
+
+    /* Creates a dialog for an error message */
+    private void showErrorDialog(int errorCode) {
+        // Create a fragment for the error dialog
+        GoogleFitCustomErrorDialig dialogFragment = new GoogleFitCustomErrorDialig();
+        // Pass the error that should be displayed
+        Bundle args = new Bundle();
+        args.putInt(AUTH_PENDING, errorCode);
+        dialogFragment.setArguments(args);
+
+        mActivity.getFragmentManager().beginTransaction()
+                .add(dialogFragment, "errordialog")
+                .commitAllowingStateLoss();
+    }
+}
