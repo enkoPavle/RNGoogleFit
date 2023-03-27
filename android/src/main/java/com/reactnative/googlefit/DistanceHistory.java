@@ -55,7 +55,6 @@ public class DistanceHistory {
 
     public ReadableArray aggregateDataByDate(long startTime, long endTime, int bucketInterval, String bucketUnit) {
         String TYPE_USER_INPUT = "user_input";
-        String TYPE_STEP_COUNTER = "Step Counter";
         Float userInputDistance = 0f;
         Float stepCounterDistance = 0f;
         Long startDate = null;
@@ -99,7 +98,6 @@ public class DistanceHistory {
 
                 // Check data stream sourse
                 Boolean isAddedByUser = StreamIdentifier.contains(TYPE_USER_INPUT);
-                Boolean isAddedByStepCounter = StreamIdentifier.contains(TYPE_STEP_COUNTER);
 
                 // Used for user input data
                 if (isAddedByUser) {
@@ -111,7 +109,7 @@ public class DistanceHistory {
                 }
 
                 // Used for step counter data
-                else if (isAddedByStepCounter) {
+                else {
                     for (Field field : dataPoint.getDataType().getFields()) {
                         Log.i(TAG,
                                 "Found step counter data: " + field.getName() + " Value: " + dataPoint.getValue(field));
