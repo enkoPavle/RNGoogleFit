@@ -19,24 +19,23 @@ import com.facebook.react.bridge.ReactContext;
 import com.facebook.react.bridge.ReadableArray;
 import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
-import com.facebook.react.modules.core.DeviceEventManagerModule;
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.common.api.PendingResult;
 import com.google.android.gms.fitness.Fitness;
 import com.google.android.gms.fitness.data.Bucket;
 import com.google.android.gms.fitness.data.DataPoint;
 import com.google.android.gms.fitness.data.DataSet;
-import com.google.android.gms.fitness.data.DataSource;
 import com.google.android.gms.fitness.data.DataType;
 import com.google.android.gms.fitness.data.Field;
 import com.google.android.gms.fitness.request.DataReadRequest;
-import com.google.android.gms.fitness.result.DailyTotalResult;
 import com.google.android.gms.fitness.result.DataReadResult;
 
+import java.sql.Array;
 import java.text.DateFormat;
 import java.text.Format;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -45,7 +44,6 @@ public class DistanceHistory {
 
     private ReactContext mReactContext;
     private GoogleFitManager googleFitManager;
-
     private static final String TAG = "DistanceHistory";
 
     public DistanceHistory(ReactContext reactContext, GoogleFitManager googleFitManager) {
@@ -57,8 +55,7 @@ public class DistanceHistory {
         String TYPE_USER_INPUT = "user_input";
         Float userInputDistance = 0f;
         Float stepCounterDistance = 0f;
-        Long startDate = null;
-        Long endDate = null;
+        List<Map> clearSamplesArray = new ArrayList<Map>();
         DateFormat dateFormat = DateFormat.getDateInstance();
         Log.i(TAG, "Range Start: " + dateFormat.format(startTime));
         Log.i(TAG, "Range End: " + dateFormat.format(endTime));
@@ -80,16 +77,12 @@ public class DistanceHistory {
 
         DataReadResult additionalReadDataResult = pendingResult.await();
 
-
-        //    Fitness.getSensorsClient(mReactContext, mReactContext.getc)
-
-
         List<DataSet> additionaldataSets = additionalReadDataResult.getDataSets();
 
         for (DataSet dataSet : additionaldataSets) {
             for (DataPoint dataPoint : dataSet.getDataPoints()) {
-                Format formatter = new SimpleDateFormat("EEE");
-                String day = formatter.format(new Date(dataPoint.getStartTime(TimeUnit.MILLISECONDS)));
+                Long start = dataPoint.getStartTime(TimeUnit.MILLISECONDS);
+                Long end = dataPoint.getEndTime(TimeUnit.MILLISECONDS);
 
                 String StreamIdentifier = dataPoint.getOriginalDataSource().getStreamIdentifier();
                 if (StreamIdentifier != null) {
@@ -99,8 +92,11 @@ public class DistanceHistory {
                 // Check data stream sourse
                 Boolean isAddedByUser = StreamIdentifier.contains(TYPE_USER_INPUT);
 
+                Log.i("isAddedByUser", "isAddedByUser: " + isAddedByUser + " ");
+
                 // Used for user input data
                 if (isAddedByUser) {
+
                     for (Field field : dataPoint.getDataType().getFields()) {
                         Log.i(TAG,
                                 "Found user input data: " + field.getName() + " Value: " + dataPoint.getValue(field));
@@ -114,6 +110,11 @@ public class DistanceHistory {
                         Log.i(TAG,
                                 "Found step counter data: " + field.getName() + " Value: " + dataPoint.getValue(field));
                         stepCounterDistance += dataPoint.getValue(field).asFloat();
+                        Map<String, Object> myMap = new HashMap<>();
+                        myMap.put("distance", dataPoint.getValue(field).asFloat());
+                        myMap.put("start", start);
+                        myMap.put("end", end);
+                        clearSamplesArray.add(myMap);
                     }
                 }
             }
@@ -143,6 +144,10 @@ public class DistanceHistory {
             }
         }
 
+        WritableMap clearSamples = Arguments.createMap();
+        clearSamples.putArray("clearSamples", Arguments.makeNativeArray(clearSamplesArray));
+        map.pushMap(clearSamples);
+
         return map;
     }
 
@@ -158,7 +163,6 @@ public class DistanceHistory {
             stepMap.putString("userId", (String) userId);
 
         }
-
 
         for (DataPoint dp : dataSet.getDataPoints()) {
             Log.i(TAG, "Data point:");
