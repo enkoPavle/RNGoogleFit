@@ -14,6 +14,8 @@ declare module 'react-native-google-fit' {
 
     getUserId: () => Promise<string | null>
 
+    isGoogleFitInstalled: () => Promise<boolean>
+
     /**
      * Start recording fitness data (steps, distance)
      * This function relies on sending events to signal the RecordingAPI status
