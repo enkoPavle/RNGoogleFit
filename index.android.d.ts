@@ -328,6 +328,12 @@ declare module 'react-native-google-fit' {
     day: Day
   };
 
+  export type ClearSamples = {
+    end: number,
+    start: number,
+    distance: number
+  }
+
   export type DistanceResponse = {
     totalDistance: number
     pedometerDistance: number
@@ -335,6 +341,7 @@ declare module 'react-native-google-fit' {
     endDate: string,
     startDate: string,
     day: Day
+    clearSamples?: ClearSamples[]
   };
 
   export type HeartRateResponse = {
