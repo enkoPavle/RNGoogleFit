@@ -216,7 +216,7 @@ declare module 'react-native-google-fit' {
 
     openFit(): void
 
-    observeSteps: (callback: (result: any, isError: boolean) => void) => void
+    observeSteps: (callback: (isError: boolean, result: any) => void) => void
 
     observeHistory: (callback: (isError: boolean, result: any) => void) => void
 
@@ -328,20 +328,22 @@ declare module 'react-native-google-fit' {
     day: Day
   };
 
-  export type ClearSamples = {
-    end: number,
+  export type ClearSample = {
+    distance: number,
     start: number,
-    distance: number
+    end: number,
   }
+
+  export type ClearSamples = ClearSample[]
 
   export type DistanceResponse = {
     totalDistance: number
     pedometerDistance: number
     userInputDistance: number
+    clearSamples: ClearSamples
     endDate: string,
     startDate: string,
     day: Day
-    clearSamples?: ClearSamples[]
   };
 
   export type HeartRateResponse = {
